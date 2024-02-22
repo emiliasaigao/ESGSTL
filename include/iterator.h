@@ -2,6 +2,7 @@
 #include <cstddef>
 
 #include "type_traits.h"
+#include "util.h"		 // 使用了move
 
 // 这个头文件用于迭代器设计，包含了一些模板类与全局函数
 
@@ -216,6 +217,167 @@ namespace esgstl {
 		advance_dispatch(iter, n, iterator_category(iter));
 	}
 	/********************************************/
+
+	template <class Container>
+	class back_inserter {
+		public:
+			typedef typename Container::iterator		Iter;
+			typedef back_inserter<Container>			self;
+
+			// 迭代器类型同容器迭代器类型一致，但事实上++、--等均不会使迭代器发生任何变化
+			typedef typename iterator_traits<Iter>::iterator_category			iterator_category;
+			typedef typename iterator_traits<Iter>::value_type					value_type;
+			typedef typename iterator_traits<Iter>::pointer						pointer;
+			typedef typename iterator_traits<Iter>::reference					reference;
+			typedef typename iterator_traits<Iter>::difference_type				difference_type;
+
+		private:
+			Container& _c;
+
+		public:
+			// 没有默认构造器，必须显示构造
+			explicit back_inserter(Container& c) : _c(c) {}
+
+			self& operator=(const value_type& value) {
+				_c.push_back(value);
+				return *this;
+			}
+
+			self& operator=(value_type&& value) {
+				_c.push_back(esgstl::move(value));
+				return *this;
+			}
+
+			// * ++ --不做任何操作
+
+			self& operator*() {
+				return *this;
+			}
+
+			self& operator++() {
+				return *this;
+			}
+
+			self& operator++(int) {
+				return *this;
+			}
+
+			self& operator--() {
+				return *this;
+			}
+
+			self& operator--(int) {
+				return *this;
+			}
+
+	};
+
+	template <class Container>
+	class front_inserter {
+		public:
+			typedef typename Container::iterator		Iter;
+			typedef front_inserter<Container>			self;
+
+			// 迭代器类型同容器迭代器类型一致，但事实上++、--等均不会使迭代器发生任何变化
+			typedef typename iterator_traits<Iter>::iterator_category			iterator_category;
+			typedef typename iterator_traits<Iter>::value_type					value_type;
+			typedef typename iterator_traits<Iter>::pointer						pointer;
+			typedef typename iterator_traits<Iter>::reference					reference;
+			typedef typename iterator_traits<Iter>::difference_type				difference_type;
+
+		private:
+			Container& _c;
+
+		public:
+			// 没有默认构造器，必须显示构造
+			explicit front_inserter(Container& c) : _c(c) {}
+
+			self& operator=(const value_type& value) {
+				_c.push_front(value);
+				return *this;
+			}
+
+			self& operator=(value_type&& value) {
+				_c.push_front(esgstl::move(value));
+				return *this;
+			}
+
+			// * ++ --不做任何操作
+			self& operator*() {
+				return *this;
+			}
+
+			self& operator++() {
+				return *this;
+			}
+
+			self operator++(int) {
+				return *this;
+			}
+
+			self& operator--() {
+				return *this;
+			}
+
+			self operator--(int) {
+				return *this;
+			}
+
+	};
+
+	template <class Container, class Iter, 
+		std::enable_if<std::is_same<typename Container::iterator,Iter>::value,int>::type = 0>
+	class inserter {
+		public:
+			typedef inserter<Container, Iter>			self;
+
+			// 迭代器类型同容器迭代器类型一致，但事实上++、--等均不会使迭代器发生任何变化
+			typedef typename iterator_traits<Iter>::iterator_category			iterator_category;
+			typedef typename iterator_traits<Iter>::value_type					value_type;
+			typedef typename iterator_traits<Iter>::pointer						pointer;
+			typedef typename iterator_traits<Iter>::reference					reference;
+			typedef typename iterator_traits<Iter>::difference_type				difference_type;
+
+		private:
+			Container& _c;
+			Iter _iter;
+
+		public:
+			// 没有默认构造器，必须显示构造
+			explicit inserter(Container& c, Iter it) : _c(c),_iter(it) {}
+
+			self& operator=(const value_type& value) {
+				_c.insert(_iter, value);
+				return *this;
+			}
+
+			self& operator=(value_type&& value) {
+				_c.insert(_iter, esgstl::move(value));
+				return *this;
+			}
+
+			// * ++ --不做任何操作
+			self& operator*() {
+				return *this;
+			}
+
+			self& operator++() {
+				return *this;
+			}
+
+			self operator++(int) {
+				return *this;
+			}
+
+			self& operator--() {
+				return *this;
+			}
+
+			self operator--(int) {
+				return *this;
+			}
+
+	};
 
 
 	// 反向迭代器reverse_iterator模板类

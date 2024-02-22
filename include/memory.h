@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <climits>
+#include <cassert>
 
 // 这个头文件负责更高级的动态内存管理
 // 包含一些基本函数、空间配置器、未初始化的储存空间管理，以及智能指针 auto_ptr 和 shared_ptr
@@ -11,6 +12,7 @@
 #include "construct.h"
 #include "uninitialized.h"
 #include "util.h"
+#include "functional.h"
 
 
 namespace esgstl {
@@ -119,11 +121,11 @@ namespace esgstl {
 		}
 	}
 
-	// 模板类auto_ptr
+	// 模板类unique_ptr
 	// 具有严格对象所有权的智能指针
 	/******************************************************************/
 	template <class T>
-	class auto_ptr {
+	class unique_ptr {
 	public:
 		typedef T value_type;
 	
@@ -131,13 +133,13 @@ namespace esgstl {
 		T* m_ptr; // 指向实际对象的指针
 
 	public:
-		explicit auto_ptr(T* p = nullptr) :m_ptr(p) {}
-		auto_ptr(auto_ptr& rhs) : m_ptr(rhs.release()) {}
+		explicit unique_ptr(T* p = nullptr) :m_ptr(p) {}
+		unique_ptr(unique_ptr&& rhs) noexcept : m_ptr(rhs.release()) {}
 		template <class U>
-		auto_ptr(auto_ptr<U>& rhs) : m_ptr(rhs.release()) {}
+		unique_ptr(unique_ptr<U>&& rhs) noexcept : m_ptr(rhs.release()) {}
 
 		// 拷贝赋值运算符
-		auto_ptr& operator=(auto_ptr& rhs) {
+		unique_ptr& operator=(unique_ptr&& rhs) noexcept {
 			if (this != &rhs) {
 				reset(rhs.release());
 			}
@@ -145,14 +147,23 @@ namespace esgstl {
 		}
 
 		template<class U>
-		auto_ptr& operator=(auto_ptr<U>& rhs) {
+		unique_ptr& operator=(unique_ptr<U>&& rhs) noexcept {
 			if (this->get() != rhs.get()) {
 				reset(rhs.release());
 			}
 			return *this;
 		}
 
-		~auto_ptr() { delete m_ptr; }
+		~unique_ptr() { delete m_ptr; }
+
+		// 禁止拷贝赋值/构造操作
+		unique_ptr(const unique_ptr& rhs) = delete;
+		unique_ptr& operator=(const unique_ptr& rhs) = delete;
+
+		explicit operator bool() const noexcept {
+			return m_ptr != nullptr;
+		}
+
 	public:
 		// 重载 operator* 和 operator->
 		T& operator*()  const { return *m_ptr; }
@@ -179,142 +190,212 @@ namespace esgstl {
 	};
 	/******************************************************************/
 
-	// shared_ptr智能指针相关类
-	// shared_ptr允许有多个智能指针同时指向一个底部资源
-	// 当最后一个指向资源的shared_ptr被析构时，会删除资源
-	/******************************************************************/
-	class shared_ptr_count{
-	private:
-		long* ptrcnt;
-		
-	public:
-		// 构造函数
-		shared_ptr_count():ptrcnt(nullptr){}
-		shared_ptr_count(const shared_ptr_count& rhs) :ptrcnt(rhs.ptrcnt) {}
-
-		void swap(shared_ptr_count& rhs) { esgstl::swap(ptrcnt, rhs.ptrcnt); }
-		long use_count() const { return ptrcnt == nullptr ? 0 : *ptrcnt; }
-
-		// 获取/共享指针的所有权，初始化/增加引用计数器
-		template <class U>
-		void acquire(U* p) {
-			if (p != nullptr) {
-				if (ptrcnt == nullptr) {
-					try
-					{
-						ptrcnt = new long(1);
-					}
-					catch (...)
-					{
-						delete p;
-						throw;
-					}
-				}
-				else {
-					++(*ptrcnt);
-				}
-			}
-		}
-
-		// 释放px指针的所有权，在适当的时候销毁对象
-		template <class U>
-		void release(U* p) {
-			if (ptrcnt != nullptr) {
-				--(*ptrcnt);
-				if (*ptrcnt == 0) {
-					delete p;
-					delete ptrcnt;
-				}
-				ptrcnt = nullptr;
-			}
-		}
+	// 计数类
+	struct ptr_count {
+		int shared_count = 1;
+		int weak_count = 0;
 	};
 
-	// shared_ptr_base 智能指针基类
-	class shared_ptr_base {
-	protected:
-		shared_ptr_count spc;
-
-		shared_ptr_base():spc(){}
-		shared_ptr_base(const shared_ptr_base& rhs) :spc(rhs.spc) {}
-
-	};
-
-	// 智能指针shared_ptr
+	// weak_ptr是若共享指针，由shared_ptr初始化
+	// 不增加管理资源的指针计数，当管理资源的shared_ptr计数清零后将阻止访问资源
 	template <class T>
-	class shared_ptr : public shared_ptr_base {
-	public:
-		typedef T element_type;
+	class weak_ptr {
+		template <class U> friend class shared_ptr;
 	private:
-		// 指向被管理空间的指针
-		T* base_ptr;
+		T* _data = nullptr;
+		ptr_count* _ptr_count = nullptr;
+
 	public:
-		// 构造函数
-		explicit shared_ptr(T* ptr) :shared_ptr_base() {
-			acquire(ptr);
+		weak_ptr() = default;
+		weak_ptr(const weak_ptr& rhs) noexcept
+			: _data(rhs._data), _ptr_count(rhs._ptr_count) {
+			if (_ptr_count) ++_ptr_count->weak_count;
 		}
 
-		shared_ptr(const shared_ptr& rhs) :shared_ptr_base(rhs) {
-			acquire(rhs.base_ptr);
+		weak_ptr(const shared_ptr<T>& rhs) noexcept
+			: _data(rhs._data), _ptr_count(rhs._ptr_count) {
+			if (_ptr_count) ++_ptr_count->weak_count;
 		}
 
-		// 这个构造器只用于智能指针类型强转，即只在static_pointer_cast（全局函数）里使用
-		template<class U>
-		shared_ptr(const shared_ptr<U>& rhs,T* p) : shared_ptr_base(rhs) {
-			acquire(p);
-		}
-
-		template <class U>
-		shared_ptr(const shared_ptr<U>& rhs) : shared_ptr_base(rhs) {
-			acquire(static_cast<shared_ptr<T>::element_type*>(rhs.get()));
-		}
-
-		// 拷贝赋值运算符,使用了拷贝与交换手法
-		shared_ptr& operator=(shared_ptr rhs) {
-			// rhs是临时对象，拷贝了传进来的实参
+		weak_ptr(weak_ptr&& rhs) noexcept {
 			swap(rhs);
+			rhs.reset();
+		}
+
+		weak_ptr& operator=(const weak_ptr& rhs) noexcept {
+			weak_ptr tmp(rhs);
+			swap(tmp);
+			return *this;
+		}
+		
+		weak_ptr& operator=(weak_ptr&& rhs) noexcept {
+			weak_ptr tmp(esgstl::move(rhs));
+			swap(tmp);
 			return *this;
 		}
 
-		~shared_ptr() { release(); }
-		// 重设指针，不传入参数则直接释放管理权
-		void reset() { release(); }
-		// 重设指针为传入的原始指针
-		void reset(T* ptr) {
+		~weak_ptr() {
 			release();
-			acquire(ptr);
 		}
 
-		// 显式类型转换为bool，只在if语句里会被隐式执行
-		explicit operator bool() { return spc.use_count() > 0; }
-		// 返回是否是底层指针唯一的管理类
-		bool unique() { return spc.use_count() == 1; }
-		// 返回当前底层指针被多少管理类同时管理
-		long use_count() { return spc.use_count(); }
-
-		T& operator*() { return *base_ptr; }
-		T* operator->() { return base_ptr; }
-		
-		T* get() const { return base_ptr; }
-		void swap(shared_ptr& rhs) {
-			esgstl::swap(base_ptr, rhs.base_ptr);
-			spc.swap(rhs.spc);
+		void reset() noexcept {
+			release();
+			_data = nullptr;
+			_ptr_count = nullptr;
 		}
 
-	private:
-		// 负责计算计数和赋值底层指针
-		void acquire(T* ptr) {
-			// 调用share_ptr_base中的share_ptr_count 的acquire
-			// 初始化或者增加计数
-			spc.acquire(ptr);
-			base_ptr = ptr;
+		int use_count() const noexcept {
+			return _data == nullptr ? 0 : _ptr_count->shared_count;
 		}
-		
-		// 负责释放管理权，减少计数，并置底层指针为nullptr
-		void release() {
-			spc.release(base_ptr);
-			base_ptr = nullptr;
+
+		bool expired() const noexcept { return use_count() == 0; }
+
+		shared_ptr<T> lock() {
+			return expired() ? shared_ptr<T>() : shared_ptr<T>(*this);
 		}
+
+		private:
+			void swap(weak_ptr& rhs) noexcept {
+				esgstl::swap(_data, rhs._data);
+				esgstl::swap(_ptr_count, rhs._ptr_count);
+			}
+
+			void release() {
+				if (_ptr_count) {
+					if (_ptr_count->shared_count == 0 && --_ptr_count->weak_count == 0) {
+						delete _ptr_count;
+						_ptr_count = nullptr;
+					}
+				}
+			}
+	};
+
+	// shared_ptr允许有多个智能指针同时指向一个底部资源
+	// 当最后一个指向资源的shared_ptr被析构时，会删除资源
+	/******************************************************************/
+	template <class T>
+	class shared_ptr {
+		template<class U> friend class shared_ptr;
+		template<class U> friend class weak_ptr;
+		private:
+			T* _data = nullptr;
+			ptr_count* _ptr_count = nullptr;
+
+		public:
+			shared_ptr() = default;
+
+			explicit shared_ptr(T* data) : _data(data) {
+				if (data) {
+					try {
+						_ptr_count = new ptr_count();
+					}
+					catch (...) {
+						delete data;
+						throw;
+					}
+				}
+			}
+			
+			shared_ptr(const shared_ptr& rhs) noexcept 
+				: _data(rhs._data), _ptr_count(rhs._ptr_count) {
+				if (_ptr_count) ++_ptr_count->shared_count;
+			}
+
+			shared_ptr(shared_ptr&& rhs) noexcept {
+				swap(rhs);
+				rhs.reset();
+			}
+
+			template <class U>
+			shared_ptr(const shared_ptr<U>& rhs) noexcept
+				: _data(rhs._data), _ptr_count(rhs._ptr_count) {
+				if (_ptr_count) ++_ptr_count->shared_count;
+			}
+
+			explicit shared_ptr(const weak_ptr<T>& rhs) noexcept
+				: _data(rhs._data), _ptr_count(rhs._ptr_count) {
+				if (_ptr_count) ++_ptr_count->shared_count;
+			}
+
+			shared_ptr& operator=(const shared_ptr& rhs) noexcept {
+				shared_ptr tmp(rhs);
+				swap(tmp);
+				return *this;
+			}
+
+			template <class U>
+			shared_ptr& operator=(const shared_ptr<U>& rhs) noexcept {
+				shared_ptr tmp(rhs);
+				swap(tmp);
+				return *this;
+			}
+
+			shared_ptr& operator=(shared_ptr&& rhs) noexcept {
+				shared_ptr tmp(esgstl::move(rhs));
+				swap(tmp);
+				return *this;
+			}
+
+			explicit operator bool() const noexcept {
+				return _data != nullptr;
+			}
+
+			~shared_ptr() {
+				release();
+			}
+
+			bool unique() const noexcept {
+				return _data != nullptr  && _ptr_count->shared_count == 1;
+			}
+
+			int use_count() const noexcept {
+				return _data == nullptr ? 0 : _ptr_count->shared_count;
+			}
+
+			void reset() {
+				release();
+				_data = nullptr;
+				_ptr_count = nullptr;
+			}
+
+			void reset(T* data) {
+				reset();
+				shared_ptr tmp(data);
+				swap(tmp);
+			}
+
+			T& operator*() const noexcept {
+				// 这里会调用operator bool如果_data为空会中断程序
+				assert(*this);
+				return *_data;
+			}
+
+			T* operator->() const noexcept {
+				return &operator*();
+			}
+
+			T* get() const noexcept {
+				return _data;
+			}
+
+		private:
+			void swap(shared_ptr& rhs) noexcept {
+				esgstl::swap(_data, rhs._data);
+				esgstl::swap(_ptr_count, rhs._ptr_count);
+			}
+
+			void release() {
+				if (_ptr_count) {
+					if (--_ptr_count->shared_count == 0) {
+						delete _data;
+						_data = nullptr;
+						if (_ptr_count->weak_count == 0) {
+							delete _ptr_count;
+							_ptr_count = nullptr;
+						}
+					}
+				}
+			}
 	};
 
 	template <class T, class U>

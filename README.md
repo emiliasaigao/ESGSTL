@@ -34,7 +34,8 @@
     | 返回迭代器某种类型信息的模板函数 |         iterator_category、distance_type、value_type         |
     |             功能函数             |    distance_dispatch、distance、advance_dispatch、advance    |
     |            反向迭代器            |          class reverse_iterator、类外操作符重载函数          |
-
+    |            插入迭代器            |         包括back_inserter、front_inserter和inserter          |
+  
   
 
 
@@ -178,10 +179,6 @@
   |    常用函数    |               move、forward、swap、swap_range                |
   | 模板结构体pair | pair类内结构、重载的pair比较运算符、重载的pair的swap函数、make_pair |
 
-- **未解决之问题**
-
-  - pair的模板构造函数之间的区别和作用，其泛型语法令人费解
-
   
 
 ### 【4】基础算法algobase.h
@@ -235,49 +232,44 @@
 
 - 介绍
 
-  - 包含了动态内存相关的类：临时缓冲区管理类、临时缓冲区分配析构函数、智能指针auto_ptr和shared_ptr相关类
+  - 包含了动态内存相关的类：临时缓冲区管理类、临时缓冲区分配析构函数、智能指针unique_ptr和weak_ptr、shared_ptr相关类
 
-  - shared_ptr实现细节
+  - shared_ptr、weak_ptr实现细节
 
-    - 原理示意图
+    - 类间关联
 
-      ![image-20230712191521141](README.assets/image-20230712191521141.png)
-
-      > 继承体系：
+      > ptr_count : 结构体，只包含用于记录shared_ptr和weak_ptr数量的int
       >
-      > shared_ptr_count : 通过动态内存记录管理同一资源的智能指针的数量
+      > ​									↓(包含其指针)															 ↓(包含其指针)
       >
-      > ​				↓ (被包含)
-      >
-      > shared_ptr_base: shared_ptr基类，包含一个spc，设置了默认/拷贝构造函数
-      >
-      > ​				↓(派生)
-      >
-      > ​	shared_ptr:智能指针类，原始指针的可共享管理类
-
-    - 关键函数
-
-      - shared_ptr_count
-        - **acquire(T* p)**:需要传入被管理的指针，原因是这个函数会申请新的空间，当无法申请时会报错，终止程序，在终止程序之前，需要delete该指针，否则会造成内存泄漏
-        - **release(T* p)**:同样需要传入被管理的指针，这个函数会释放当前智能指针的管理权并使计数减少，当计数降低至0时，会delete掉该指针
+      > ​	shared_ptr：可共享管理权的动态资源管理类，底层保存原生指针     weak_ptr：弱关联指针，依附shared_ptr存在
+      
+    - 共有函数
+    
+      - **release**：减少ptr_count指针记录的shared_ptr/weak_ptr的计数，如果共享指针数量为零，释放所管理的资源，如果弱关联指针数量为零，delete掉ptr_count的指针
+      - reset：调用release，并使两个底层指针为nullptr
+      
+    - 独有函数
+    
+      - weak_ptr
+        - **lock**：会检查底层ptr_count指针shared_ptr的计数，如果不为0，将自己作为构造参数返回一个shared_ptr，否则返回空shared_ptr
+        - expire：返回底层指针ptr_count指针shared_ptr的计数是否为0
       - shared_ptr
-        - **acquire(T* p)**:调用内部的spc的acquire，并使内部的base_ptr指向p所指的动态资源
-        - **release()**:调用内部的spc的release，并使内部的base_ptr指向nullptr
-        - **shared_ptr(const shared_ptr& rhs)**:拷贝构造函数，以rhs初始化shared_ptr_base,调用自身acquire
-        - **shared_ptr& operator=(shared_ptr rhs)**:使用拷贝交换策略，拷贝的时候会触发acquire使得计数增加，再同临时对象swap指针，达到拷贝增加计数的效果
-        - **shared_ptr(const shared_ptr<U>& rhs)**:接收其他类型的share_ptr用以初始化，目的是赋予动态指针同原始指针类似的多态性，不是explicit的意味着可以隐式转换
+        - unique：返回shared_ptr的计数是否为1
+        - use_count：返回有多少个shared_ptr管理当前资源
+        - reset(T* data)：重置shared_ptr，并作为第一个共享指针管理data的资源
       - make_shared(Args&&... args)
         - 内部new了对象并创建一返回个shared_ptr管理它
-
+    
   - 头文件组成
-
+  
     |        组成部分        |                           具体内容                           |
     | :--------------------: | :----------------------------------------------------------: |
     |  缓冲区分配\析构函数   |        get_temporary_helper、release_tmeporary_buffer        |
     | 模板类temporary_buffer | allocate_bufferfe：分配缓冲区，initialize_buffer：初始化缓冲区，私有的拷贝构造函数\赋值运算符阻止拷贝，无默认构造函数 |
-    |        auto_ptr        |       reset()、release()不允许共享管理权的简易智能指针       |
-    |    shared_ptr系列类    |        shared_ptr_count、shared_ptr_base、shared_ptr         |
-
+    |       unique_ptr       |       reset()、release()不允许共享管理权的简易智能指针       |
+    |       shared_ptr       |               ptr_count、weak_ptr、shared_ptr                |
+  
     
 
 
