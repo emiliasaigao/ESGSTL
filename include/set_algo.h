@@ -142,7 +142,7 @@ namespace esgstl {
 			else if (*first2 < *first1) {
 				*result = *first2;
 				++first2;
-				++result
+				++result;
 			}
 			else {
 				++first1;

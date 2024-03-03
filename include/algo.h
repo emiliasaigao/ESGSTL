@@ -1798,11 +1798,11 @@ namespace esgstl {
 		Distance len1, Distance len2, Pointer buffer, Distance buff_size, Compare comp) {
 		if (len1 <= len2 && len1 <= buff_size) {
 			auto buffer_end = copy(first, mid, buffer);
-			merge(first, mid, buffer, buffer_end, first, comp);
+			merge(mid, last, buffer, buffer_end, first, comp);
 		}
 		else if (len2 <= buff_size) {
 			auto buffer_end = copy(mid, last, buffer);
-			merge_backward(mid, last, buffer, buffer_end, last, comp);
+			merge_backward(first, mid, buffer, buffer_end, last, comp);
 		}
 		else {
 			Distance len11, len22;
@@ -1871,7 +1871,7 @@ namespace esgstl {
 		if (len1 == 0 || len2 == 0) return;
 		// 递归出口2：当只剩下两个元素时，若逆序，则先翻转两个元素，否则直接结束
 		if (len1 + len2 == 2) {
-			if (*mid < *first) iter_swap(first, mid);
+			if (comp(*mid, *first) iter_swap(first, mid);
 			return;
 		}
 		Distance len11, len22;
@@ -1958,7 +1958,7 @@ namespace esgstl {
 		while (last - first > 3) {
 			auto cut = unchecked_partition(first, last,
 				median(*first, *last, *(first + (last - first) / 2)));
-			display(first, last);
+			//display(first, last);
 			if (nth < cut) last = cut;
 			else first = cut;
 		}

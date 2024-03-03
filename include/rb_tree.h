@@ -207,8 +207,10 @@ namespace esgstl {
 					node = y;
 					y = y->parent;
 				}
-				// 不懂为什么这里下面这句不需要，如果是最小的节点再--没有下面那句最后结果就是根节点
-				// if (node->left == y) return;
+				// 源码剖析里不知道为什么这里下面这句没有
+				// 经过测试和++是对称的问题，即如果是根节点是最小的节点，且--的对象是根节点
+				// 再--没有下面那句最后结果就是根节点
+				if (node->left == y) return;
 				node = y;
 			}
 		}
@@ -556,8 +558,11 @@ namespace esgstl {
 		else {
 			// 让z的parent连上x
 			x_parent = z->parent;
-			if (x) x->parent = z->parent;
-			
+			if (x) {
+				// 如果x不为空，那么就是删除具有一个红节点的黑节点(x红z黑)，需要互换颜色
+				esgstl::swap(x->color, z->color);
+				x->parent = z->parent;
+			}
 			// 如果z是根节点的话，要变动root指针的指向，相当于直接切断z连上x了
 			if (z == root) root = x;
 			else if (rb_tree_is_lchild(z)) z->parent->left = x;

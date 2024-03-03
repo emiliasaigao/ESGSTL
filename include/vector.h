@@ -528,6 +528,7 @@ namespace esgstl {
 	template<class T>
 	inline void vector<T>::
 		destory_and_recover(iterator first, iterator last, size_type n) {
+		if (n == 0) return;
 		data_allocator::destory(first, last);
 		data_allocator::deallocate(first);
 	}

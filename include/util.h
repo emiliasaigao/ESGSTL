@@ -75,19 +75,19 @@ namespace esgstl {
 		constexpr pair() : first(),second(){}
 
         /***************************************/
-        // 以下模板构造函数，不知所云，且待日后分析
+        
         /***************************************/
-        // default constructiable
+        // 默认构造函数，只有T1和T2都可以默认构造时才会生成
         template <class Other1 = T1, class Other2 = T2,
             typename = typename std::enable_if<
-            std::is_default_constructible<Other1>::value&&
+            std::is_default_constructible<Other1>::value &&
             std::is_default_constructible<Other2>::value, void>::type>
         constexpr pair()
             : first(), second()
         {
         }
 
-        // implicit constructiable for this type
+        // 只有T1和T2都可以被隐式用常量引用拷贝构造时才会生成
         template <class U1 = T1, class U2 = T2,
             typename std::enable_if<
             std::is_copy_constructible<U1>::value&&
@@ -99,7 +99,7 @@ namespace esgstl {
         {
         }
 
-        // explicit constructible for this type
+        // 假如其中有一个拷贝构造函数是explicit的，就生成这个
         template <class U1 = T1, class U2 = T2,
             typename std::enable_if<
             std::is_copy_constructible<U1>::value&&
@@ -114,7 +114,7 @@ namespace esgstl {
         pair(const pair& rhs) = default;
         pair(pair&& rhs) = default;
 
-        // implicit constructiable for other type
+        // 假如Other1和Other2都可以隐式构造T1和T2则生成这个
         template <class Other1, class Other2,
             typename std::enable_if<
             std::is_constructible<T1, Other1>::value&&
@@ -127,7 +127,7 @@ namespace esgstl {
         {
         }
 
-        // explicit constructiable for other type
+        // 假如至少有一个不能隐式构造则生成这个
         template <class Other1, class Other2,
             typename std::enable_if<
             std::is_constructible<T1, Other1>::value&&
@@ -140,7 +140,7 @@ namespace esgstl {
         {
         }
 
-        // implicit constructiable for other pair
+        // 假如Other1和Other2都可以隐式构造T1和T2则生成这个
         template <class Other1, class Other2,
             typename std::enable_if<
             std::is_constructible<T1, const Other1&>::value&&
@@ -153,7 +153,7 @@ namespace esgstl {
         {
         }
 
-        // explicit constructiable for other pair
+        // 假如至少有一个不能隐式构造则生成这个
         template <class Other1, class Other2,
             typename std::enable_if<
             std::is_constructible<T1, const Other1&>::value&&
@@ -166,7 +166,7 @@ namespace esgstl {
         {
         }
 
-        // implicit constructiable for other pair
+        // 假如Other1和Other2都可以隐式构造T1和T2则生成这个
         template <class Other1, class Other2,
             typename std::enable_if<
             std::is_constructible<T1, Other1>::value&&
@@ -179,7 +179,7 @@ namespace esgstl {
         {
         }
 
-        // explicit constructiable for other pair
+        // 假如至少有一个不能隐式构造则生成这个
         template <class Other1, class Other2,
             typename std::enable_if<
             std::is_constructible<T1, Other1>::value&&
